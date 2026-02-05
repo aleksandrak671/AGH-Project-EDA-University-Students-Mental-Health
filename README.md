@@ -1,9 +1,5 @@
 # EDA – University Students’ Mental Health
 
-[🌐 View the project as a web page (GitHub Pages)](https://aleksandrak671.github.io/EDA-Zdrowie-psychiczne-Student-w-University-Students-Mental-Health/)
-
----
-
 ## Project Description
 
 Exploratory Data Analysis (EDA) of mental health among university students, based on survey data collected from students at a university in Malaysia. The goal is to better understand factors influencing mental well-being, their distribution in the population, and to identify potential areas for support.
@@ -42,15 +38,9 @@ The project was developed in R using packages such as:
 
 ---
 
-## Publication
-
-The project is published as a static HTML page using GitHub Pages, allowing for easy viewing of results and visualizations without needing to run the code locally.
-
----
-
 ## Data Source and Context
 
 The data used in this analysis comes from a publicly available dataset on Kaggle:  
-➡️ [University Students’ Mental Health Dataset on Kaggle](https://www.kaggle.com/datasets/junnn0126/university-students-mental-health/data)
+[University Students’ Mental Health Dataset on Kaggle](https://www.kaggle.com/datasets/junnn0126/university-students-mental-health/data)
 
 This project was prepared as part of the **Introduction to Data Analysis 2024/25** university course, serving as a practical example of applying exploratory data analysis (EDA) methods.
