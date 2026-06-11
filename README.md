@@ -1,46 +1,32 @@
-# EDA – University Students’ Mental Health
+# EDA - University Students' Mental Health
 
 ## Project Description
 
-Exploratory Data Analysis (EDA) of mental health among university students, based on survey data collected from students at a university in Malaysia. The goal is to better understand factors influencing mental well-being, their distribution in the population, and to identify potential areas for support.
+Exploratory Data Analysis (EDA) of mental health among university students, based on survey data collected from students at a university in Malaysia. The goal is to better understand factors related to students' mental well-being, examine their distribution in the sample, and answer a set of research questions.
 
 The analysis includes:
-- Loading and initial preparation of the data
-- Describing variables and their distributions
-- Hypothesis testing and answering research questions
-- Visualization and interpretation of results
+- Loading, cleaning, and initial preparation of the data
+- Describing the variables and their distributions
+- Answering ten research questions, supported by statistical tests (chi-square, Pearson correlation, linear regression)
+- Visualization and interpretation of the results
 
----
+## Dataset
 
-## Details
-
-The data was collected through an online survey and includes variables such as:
-- Stress level
-- Sleep problems
-- Mental well-being
-- Relaxation activities
-- Social support
-
-The aim of this analysis is to draw conclusions that can help design support programs for students and increase awareness of the importance of mental health in academic environments.
-
----
+The data was collected through an online survey (Google Forms) and contains **1000 responses described by 16 variables**, grouped into:
+- **Demographics and academics:** gender, age, field of study (course), year of study, CGPA (grade average)
+- **Mental health indicators:** depression, anxiety, panic attacks, specialist treatment, symptom frequency (last 7 days), access to mental health support
+- **Study and lifestyle:** sleep quality, study stress level, study hours per week, academic engagement
 
 ## Technologies
 
-The project was developed in R using packages such as:
-- dplyr
-- ggplot2
-- tidyr
-- readr
-- scales
-- RColorBrewer
-- corrplot
-
----
+The project was developed in **R Markdown** using packages such as:
+- dplyr, tidyr, readr, stringr, forcats (data manipulation)
+- ggplot2, scales, RColorBrewer, corrplot (visualization)
+- knitr, kableExtra, DT (tables and report output)
 
 ## Data Source and Context
 
-The data used in this analysis comes from a publicly available dataset on Kaggle:  
-[University Students’ Mental Health Dataset on Kaggle](https://www.kaggle.com/datasets/junnn0126/university-students-mental-health/data)
+The data comes from a publicly available dataset on Kaggle:
+[University Students' Mental Health Dataset on Kaggle](https://www.kaggle.com/datasets/junnn0126/university-students-mental-health/data)
 
-This project was prepared as part of the **Introduction to Data Analysis 2024/25** university course, serving as a practical example of applying exploratory data analysis (EDA) methods.
+This project was prepared as part of the **Introduction to Data Analysis 2024/25** university course, as a practical example of applying exploratory data analysis (EDA) methods.
