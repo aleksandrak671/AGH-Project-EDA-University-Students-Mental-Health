@@ -1,0 +1,639 @@
+---
+title: "EDA – Zdrowie psychiczne studentów (University Students' Mental Health)"
+author: "A.K."
+date: "2024-12-02"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: false
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    code_folding: show
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  message    = FALSE,
+  warning    = FALSE,
+  fig.align  = "center",
+  fig.width  = 8,
+  fig.height = 5,
+  out.width  = "90%",
+  dpi        = 150,
+  comment    = "#>"
+)
+```
+
+```{css, echo=FALSE}
+body { font-size: 15px; line-height: 1.65; }
+h1, h2, h3 { color: #2c3e50; margin-top: 1.4em; }
+h1 { border-bottom: 2px solid #18bc9c; padding-bottom: .2em; }
+
+table { margin: 1em auto; }
+.table { width: auto; }
+caption, .table caption { color: #555; font-style: italic; padding-bottom: .4em; }
+.figure, img { margin: 1.2em auto; }
+
+/* ramka z wnioskami, zastępuje wszystkie nagłówki "#### Wyniki:" */
+.callout-wyniki {
+  border-left: 5px solid #18bc9c;
+  background: #eafaf6;
+  padding: 0.8em 1.1em;
+  margin: 1.2em 0;
+  border-radius: 4px;
+}
+.callout-wyniki::before {
+  content: "Wyniki";
+  display: block;
+  font-weight: 700;
+  color: #128a72;
+  margin-bottom: 0.35em;
+  letter-spacing: .03em;
+}
+/* pomocnicza ramka informacyjna (legendy, uwagi metodologiczne) */
+.callout-note {
+  border-left: 5px solid #3498db;
+  background: #eef6fc;
+  padding: 0.7em 1em;
+  margin: 1em 0;
+  border-radius: 4px;
+  font-size: .95em;
+}
+/* wyróżniony box z najważniejszym wnioskiem */
+.callout-key {
+  border-left: 5px solid #f39c12;
+  background: #fef5e7;
+  padding: 0.9em 1.2em;
+  margin: 1.3em 0;
+  border-radius: 4px;
+  font-size: 1.02em;
+}
+```
+
+Pakiety, z których korzystam w analizie:
+
+```{r libraries}
+library(readr)        # wczytywanie danych
+library(dplyr)        # transformacje danych
+library(tidyr)        # pivot_longer
+library(stringr)      # czyszczenie tekstu
+library(forcats)      # porządkowanie poziomów faktorów
+library(ggplot2)      # wykresy
+library(scales)       # formatowanie osi (procenty)
+library(RColorBrewer) # palety kolorów
+library(corrplot)     # macierz korelacji
+library(knitr)        # tabele kable
+library(kableExtra)   # stylizacja tabel
+library(DT)           # interaktywny podgląd danych
+```
+
+# Wstęp
+
+Celem tej analizy eksploracyjnej (EDA) jest zrozumienie struktury i rozkładu danych o zdrowiu psychicznym studentów zawartych w pliku `mentalhealth_dataset.csv` oraz udzielenie odpowiedzi na postawione pytania badawcze. Zbiór danych został zebrany za pomocą ankiety w formularzach Google wśród studentów jednego z uniwersytetów w Malezji i opisuje ich sytuację akademicką oraz stan zdrowia psychicznego. Zbiór liczy **1000 obserwacji i 16 zmiennych**.
+
+Warto już na wstępie zaznaczyć, że próba jest **silnie niezrównoważona pod względem płci** (760 kobiet i 240 mężczyzn), co należy uwzględniać przy interpretacji wyników. Porównania między płciami opieram więc na odsetkach w obrębie każdej grupy, a nie na liczbach bezwzględnych.
+
+## Wczytanie danych
+
+```{r load-data}
+mentalhealth_raw <- read_csv("mentalhealth_dataset.csv", show_col_types = FALSE)
+```
+
+## Przygotowanie i czyszczenie danych
+
+Surowe dane wymagają uporządkowania, zanim przejdę do analizy. Kolumna `Course` zawiera 48 niespójnych wartości (różnice wielkości liter i literówki, np. `Engineering`/`engin`), a `YearOfStudy` ma niespójną wielkość liter. Wszystkie konwersje typów wykonuję **raz** w jednym potoku, aby uniknąć powtarzania ich przy każdym pytaniu.
+
+```{r prep}
+# akronimy kierunków: zostają zapisane wielkimi literami (nie są title-case'owane)
+akronimy <- c("BCS", "BIT", "KOE", "BENL", "KIRKHS", "ENM", "CTS", "TESL",
+              "MHSC", "KENMS", "ALA", "KOP", "IT", "TAASL")
+
+# funkcja czyszcząca nazwy kierunków (scala duplikaty, zachowuje akronimy)
+clean_course <- function(x) {
+  y  <- str_squish(x)
+  yl <- str_to_lower(y)
+  case_when(
+    yl %in% c("engineering", "engine", "engin") ~ "Engineering",
+    yl %in% c("koe")                            ~ "KOE",
+    yl %in% c("psychology")                     ~ "Psychology",
+    yl %in% c("law", "laws")                    ~ "Law",
+    yl %in% c("benl")                           ~ "BENL",
+    yl %in% c("kirkhs", "irkhs")                ~ "KIRKHS",
+    yl %in% c("pendidikan islam")               ~ "Pendidikan Islam",
+    yl %in% c("islamic education")              ~ "Islamic Education",
+    yl %in% c("biomedical science")             ~ "Biomedical Science",
+    yl %in% c("mathemathics", "mathematics")    ~ "Mathematics",
+    yl %in% c("diploma tesl")                   ~ "Diploma TESL",
+    yl %in% c("diploma nursing")                ~ "Diploma Nursing",
+    yl %in% c("banking studies")                ~ "Banking Studies",
+    yl %in% c("business administration")        ~ "Business Administration",
+    yl %in% c("human resources")                ~ "Human Resources",
+    yl %in% c("human sciences")                 ~ "Human Sciences",
+    yl %in% c("marine science")                 ~ "Marine Science",
+    yl %in% c("fiqh fatwa")                     ~ "Fiqh Fatwa",
+    str_to_upper(y) %in% akronimy               ~ str_to_upper(y),
+    TRUE                                        ~ str_to_title(y)
+  )
+}
+
+mentalhealth_data <- mentalhealth_raw %>%
+  mutate(
+    # płeć: tylko dwie kategorie, z czytelnymi polskimi etykietami
+    Gender = factor(Gender, levels = c("Female", "Male"),
+                    labels = c("Kobieta", "Mężczyzna")),
+    # kierunek: oczyszczony
+    Course_clean = factor(clean_course(Course)),
+    # rok studiów: ujednolicona wielkość liter, uporządkowany factor
+    YearOfStudy = factor(str_to_title(str_squish(YearOfStudy)),
+                         levels = c("Year 1", "Year 2", "Year 3", "Year 4"),
+                         ordered = TRUE),
+    # konwersje typów wykonane raz
+    across(c(Depression, Anxiety, PanicAttack,
+             SpecialistTreatment, HasMentalHealthSupport), as.integer),
+    across(c(Age, CGPA, SleepQuality, StudyStressLevel,
+             StudyHoursPerWeek, AcademicEngagement, SymptomFrequency_Last7Days),
+           as.numeric),
+    # wersje etykietowane (do wykresów); numeryczne oryginały zostają do korelacji i testów
+    Stres_f = factor(StudyStressLevel, levels = 1:5, ordered = TRUE,
+                     labels = c("1 (najniższy)", "2", "3", "4", "5 (najwyższy)")),
+    Sen_f = factor(SleepQuality, levels = 1:5, ordered = TRUE,
+                   labels = c("1 (bardzo zła)", "2", "3", "4", "5 (bardzo dobra)")),
+    Wsparcie_f = factor(HasMentalHealthSupport, levels = c(0, 1),
+                        labels = c("Bez wsparcia", "Ze wsparciem")),
+    Panika_f = factor(PanicAttack, levels = c(0, 1),
+                      labels = c("Brak ataków", "Ataki paniki"))
+  ) %>%
+  select(-Timestamp)   # mieszane formaty dat, nieużywane w analizie
+
+# pomocnik: ogranicza dane do kierunków o wystarczającej liczebności (domyślnie n >= 20)
+courses_min_n <- function(df, min_n = 20) {
+  df %>%
+    add_count(Course_clean, name = "n_kierunek") %>%
+    filter(n_kierunek >= min_n) %>%
+    mutate(Course_clean = fct_drop(Course_clean)) %>%
+    select(-n_kierunek)
+}
+```
+
+Czyszczenie redukuje liczbę kierunków z 48 do `r n_distinct(mentalhealth_data$Course_clean)`, z czego tylko `r mentalhealth_data %>% count(Course_clean) %>% filter(n >= 20) %>% nrow()` ma liczebność n ≥ 20. Tylko te kierunki wykorzystuję w wykresach na poziomie kierunku (pytania 5 i 8).
+
+```{r global-theme}
+# spójny motyw i paleta dla wszystkich wykresów
+theme_set(theme_minimal(base_size = 12))
+theme_update(
+  plot.title    = element_text(face = "bold", size = 14),
+  plot.subtitle = element_text(color = "grey35"),
+  axis.title    = element_text(size = 12),
+  legend.position = "top"
+)
+# paleta przyjazna osobom z zaburzeniami rozróżniania barw (Okabe-Ito)
+pal_okabe <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7",
+               "#E69F00", "#56B4E9", "#F0E442", "#999999")
+```
+
+## Pierwsze wiersze danych
+
+```{r preview}
+DT::datatable(
+  head(mentalhealth_raw, 10),
+  options = list(scrollX = TRUE, dom = "t"),
+  caption = "Pierwsze 10 wierszy surowego zbioru"
+)
+```
+
+## Kontrola jakości danych
+
+Zamiast surowego `str()` sprawdzam zwięźle kompletność i unikalność danych:
+
+```{r data-quality}
+# metryki liczone na surowym zbiorze (16 kolumn), przed dodaniem kolumn pochodnych
+tibble::tibble(
+  Metryka = c("Liczba wierszy", "Liczba kolumn",
+              "Braki danych (NA)", "Zduplikowane wiersze"),
+  Wartość = c(nrow(mentalhealth_raw), ncol(mentalhealth_raw),
+              sum(is.na(mentalhealth_raw)),
+              sum(duplicated(mentalhealth_raw)))
+) %>%
+  kable(caption = "Kontrola jakości danych") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+Zbiór jest kompletny (brak wartości `NA`) i nie zawiera zduplikowanych wierszy, więc nie ma potrzeby imputacji ani usuwania duplikatów.
+
+## Statystyki opisowe zmiennych numerycznych
+
+Poniżej statystyki dla zmiennych ciągłych i porządkowych (Likerta). Zmienne binarne 0/1 (depresja, lęk, ataki paniki, leczenie, wsparcie) pomijam; ich odsetki podałam w słowniku zmiennych.
+
+```{r numeric-summary}
+mentalhealth_data %>%
+  select(Age, CGPA, SymptomFrequency_Last7Days, SleepQuality,
+         StudyStressLevel, StudyHoursPerWeek, AcademicEngagement) %>%
+  summarise(across(everything(),
+                   list(min = ~min(.x), mediana = ~median(.x),
+                        średnia = ~round(mean(.x), 2), max = ~max(.x)),
+                   .names = "{.col}__{.fn}")) %>%
+  pivot_longer(everything(),
+               names_to = c("Zmienna", ".value"), names_sep = "__") %>%
+  kable(caption = "Statystyki opisowe zmiennych numerycznych") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+# Opis zmiennych
+
+Poniżej znajduje się słownik wszystkich 16 zmiennych. Przy zmiennych `Timestamp`, `YearOfStudy` i `Course` zaznaczam, że w surowej postaci wymagają uporządkowania (zostało ono wykonane w sekcji *Przygotowanie i czyszczenie danych*).
+
+```{r data-dictionary}
+slownik_zmiennych <- tibble::tribble(
+  ~Zmienna,                     ~Typ,               ~Opis,                                    ~`Wartości / Zakres`,
+  "Timestamp",                  "chr",              "Data wypełnienia ankiety",               "Mieszane formaty (np. 13/7/2020, 2020-07-08); nieużywana",
+  "Gender",                     "chr",              "Płeć uczestnika",                        "Female (760), Male (240), tylko 2 kategorie",
+  "Age",                        "num",              "Wiek studenta",                          "18–25 (mediana 21)",
+  "Course",                     "chr",              "Kierunek studiów",                       "48 surowych kategorii, niespójne, wymaga czyszczenia",
+  "YearOfStudy",                "chr",              "Rok studiów",                            "Niespójna wielkość liter → Year 1–Year 4",
+  "CGPA",                       "num",              "Średnia ocen (Cumulative GPA)",          "2.0–4.0 (skupienie przy 4.0)",
+  "Depression",                 "int (0/1)",        "Objawy depresji",                        "0 = brak, 1 = występują (48,3%)",
+  "Anxiety",                    "int (0/1)",        "Objawy lęku",                            "0 = brak, 1 = występują (47,4%)",
+  "PanicAttack",                "int (0/1)",        "Ataki paniki",                           "0 = brak, 1 = występują (45,8%)",
+  "SpecialistTreatment",        "int (0/1)",        "Leczenie specjalistyczne",               "0 = nie, 1 = tak (6,7%)",
+  "SymptomFrequency_Last7Days", "int",              "Liczba dni z objawami (ost. 7 dni)",     "0–7 (rozkład ~jednostajny)",
+  "HasMentalHealthSupport",     "int (0/1)",        "Dostęp do wsparcia psychologicznego",    "0 = brak, 1 = tak (6,7%)",
+  "SleepQuality",               "int (Likert 1–5)", "Jakość snu",                             "1 (bardzo zła) – 5 (bardzo dobra)",
+  "StudyStressLevel",           "int (Likert 1–5)", "Poziom stresu związanego ze studiami",   "1 (niski) – 5 (wysoki)",
+  "StudyHoursPerWeek",          "int",              "Godziny nauki tygodniowo",               "1–19 (rozkład ~jednostajny)",
+  "AcademicEngagement",         "int (Likert 1–5)", "Zaangażowanie w studia",                 "1 (niskie) – 5 (wysokie)"
+)
+
+kable(slownik_zmiennych,
+      caption = "Słownik zmiennych zbioru mentalhealth_dataset.csv (1000 obserwacji, 16 zmiennych)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE, position = "center") %>%
+  column_spec(1, bold = TRUE)
+```
+
+# Pytania badawcze i analiza danych
+
+## 1. Który z objawów (depresja, lęk czy ataki paniki) występuje najczęściej?
+
+```{r q1, fig.cap="Rysunek 1: Odsetek studentów zgłaszających poszczególne objawy zdrowia psychicznego."}
+najczestsze_problemy <- mentalhealth_data %>%
+  summarise(
+    Depresja       = mean(Depression),
+    Lęk            = mean(Anxiety),
+    `Ataki paniki` = mean(PanicAttack)
+  ) %>%
+  pivot_longer(everything(), names_to = "Problem", values_to = "Odsetek")
+
+ggplot(najczestsze_problemy,
+       aes(x = fct_reorder(Problem, -Odsetek), y = Odsetek, fill = Problem)) +
+  geom_col(width = 0.65) +
+  geom_text(aes(label = percent(Odsetek, accuracy = 0.1)), vjust = -0.4, size = 4) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, 0.55), expand = expansion(mult = c(0, 0.08))) +
+  scale_fill_manual(values = pal_okabe) +
+  labs(title = "Najczęstsze problemy zdrowia psychicznego wśród studentów",
+       subtitle = "Odsetek studentów zgłaszających dany objaw (n = 1000)",
+       x = NULL, y = "Odsetek studentów") +
+  guides(fill = "none")
+```
+
+:::{.callout-wyniki}
+Odsetki trzech objawów są do siebie zbliżone: depresja występuje u 48,3% studentów, lęk u 47,4%, a ataki paniki u 45,8%. Najczęstszym objawem jest zatem **depresja**, choć jej przewaga nad pozostałymi jest niewielka.
+:::
+
+## 2. Czy kobiety są bardziej narażone na problemy zdrowia psychicznego niż mężczyźni?
+
+Ponieważ próba jest niezrównoważona (760 kobiet vs 240 mężczyzn), porównanie liczb bezwzględnych byłoby mylące: słupki kobiet byłyby wyższe wyłącznie z powodu liczebności. Porównuję więc **odsetki** objawów w obrębie każdej płci i dodatkowo sprawdzam istotność różnic **testem chi-kwadrat**.
+
+```{r q2-plot, fig.cap="Rysunek 2: Odsetek występowania objawów w obrębie każdej płci (porównanie odsetków, nie liczb bezwzględnych)."}
+odsetki_plci <- mentalhealth_data %>%
+  select(Płeć = Gender, Depresja = Depression, Lęk = Anxiety, `Ataki paniki` = PanicAttack) %>%
+  pivot_longer(-Płeć, names_to = "Problem", values_to = "x") %>%
+  group_by(Płeć, Problem) %>%
+  summarise(Odsetek = mean(x), .groups = "drop")
+
+ggplot(odsetki_plci, aes(x = Problem, y = Odsetek, fill = Płeć)) +
+  geom_col(position = position_dodge(0.8), width = 0.7) +
+  geom_text(aes(label = percent(Odsetek, accuracy = 0.1)),
+            position = position_dodge(0.8), vjust = -0.4, size = 3.4) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, 0.6), expand = expansion(mult = c(0, 0.08))) +
+  scale_fill_manual(values = c("Kobieta" = "#CC79A7", "Mężczyzna" = "#0072B2")) +
+  labs(title = "Odsetek występowania problemów w obrębie płci",
+       subtitle = "Porównujemy odsetki, nie liczby bezwzględne (760 K : 240 M)",
+       x = "Rodzaj problemu", y = "Odsetek w obrębie płci", fill = "Płeć")
+```
+
+```{r q2-test}
+problemy <- c(Depresja = "Depression", Lęk = "Anxiety", `Ataki paniki` = "PanicAttack")
+
+testy_plci <- lapply(names(problemy), function(lab) {
+  v <- problemy[[lab]]
+  r <- tapply(mentalhealth_data[[v]], mentalhealth_data$Gender, mean)
+  p <- suppressWarnings(
+    chisq.test(table(mentalhealth_data$Gender, mentalhealth_data[[v]]))$p.value)
+  tibble::tibble(
+    Problem            = lab,
+    `Kobiety`          = percent(r[["Kobieta"]],   accuracy = 0.1),
+    `Mężczyźni`        = percent(r[["Mężczyzna"]], accuracy = 0.1),
+    `p (chi-kwadrat)`  = round(p, 3),
+    `Istotne (p<0,05)` = ifelse(p < 0.05, "tak", "nie")
+  )
+}) %>% bind_rows()
+
+kable(testy_plci,
+      caption = "Odsetek objawów w obrębie płci oraz test istotności różnic (chi-kwadrat)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+:::{.callout-wyniki}
+Po porównaniu **odsetków** w obrębie każdej płci różnice między kobietami a mężczyznami są niewielkie i **statystycznie nieistotne**: depresja 49,5% (K) vs 44,6% (M), p = 0,21; lęk 47,2% vs 47,9%, p = 0,91; ataki paniki 46,2% vs 44,6%, p = 0,72. We wszystkich przypadkach p > 0,05, więc dane **nie potwierdzają**, że kobiety są bardziej narażone na te objawy. Wcześniejsze wrażenie przewagi kobiet wynikało z niezrównoważonej próby (kobiet jest ponad trzykrotnie więcej, więc na wykresie liczb bezwzględnych ich słupki są wyższe mimo niemal identycznych odsetków).
+:::
+
+## 3. Jak wiek wiąże się z występowaniem problemów psychicznych?
+
+Aby uczciwie porównać roczniki wieku o różnej liczebności, pokazuję **odsetek** studentów z danym objawem w każdym roczniku (a nie liczby bezwzględne).
+
+```{r q3, fig.cap="Rysunek 3: Odsetek występowania objawów w zależności od wieku studenta."}
+wiek_odsetki <- mentalhealth_data %>%
+  select(Wiek = Age, Depresja = Depression, Lęk = Anxiety, `Ataki paniki` = PanicAttack) %>%
+  pivot_longer(-Wiek, names_to = "Problem", values_to = "x") %>%
+  group_by(Problem, Wiek) %>%
+  summarise(Odsetek = mean(x), .groups = "drop")
+
+ggplot(wiek_odsetki, aes(x = Wiek, y = Odsetek)) +
+  geom_col(fill = "#0072B2", width = 0.8) +
+  facet_wrap(~ Problem) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(title = "Odsetek występowania objawów w zależności od wieku",
+       subtitle = "Udział studentów z danym objawem w każdym roczniku (18–25 lat)",
+       x = "Wiek", y = "Odsetek studentów")
+```
+
+:::{.callout-wyniki}
+Młodsi studenci (18–20 lat) wydają się nieco bardziej podatni na lęk i ataki paniki, a w przypadku depresji różnice są mniej wyraźne. Należy jednak pamiętać, że zakres wieku w zbiorze jest **wąski** (18–25 lat, mediana 21), więc obserwację tę traktuję jako **wstępną**, a nie potwierdzoną statystycznie zależność. Możliwym wyjaśnieniem byłoby pierwsze zetknięcie najmłodszych studentów z presją akademicką i adaptacja do nowego środowiska.
+:::
+
+## 4. Czy liczba godzin nauki w tygodniu wiąże się z poziomem stresu?
+
+```{r q4, fig.cap="Rysunek 4: Rozkład liczby godzin nauki w zależności od poziomu stresu (boxplot; biały romb = średnia)."}
+r_godziny_stres <- cor(mentalhealth_data$StudyHoursPerWeek,
+                       mentalhealth_data$StudyStressLevel)
+p_godziny_stres <- cor.test(mentalhealth_data$StudyHoursPerWeek,
+                            mentalhealth_data$StudyStressLevel)$p.value
+
+ggplot(mentalhealth_data, aes(x = Stres_f, y = StudyHoursPerWeek, fill = Stres_f)) +
+  geom_boxplot(width = 0.6, alpha = 0.85, outlier.alpha = 0.25) +
+  stat_summary(fun = mean, geom = "point", shape = 23,
+               size = 2.6, fill = "white", color = "black") +
+  scale_fill_viridis_d(option = "C", direction = -1) +
+  labs(title = "Liczba godzin nauki w zależności od poziomu stresu",
+       subtitle = sprintf("Rozkłady niemal identyczne na każdym poziomie stresu (r = %.2f; p = %.2f) → brak zależności",
+                           r_godziny_stres, p_godziny_stres),
+       x = "Poziom stresu związanego ze studiami",
+       y = "Liczba godzin nauki w tygodniu",
+       caption = "Biały romb = średnia") +
+  guides(fill = "none")
+```
+
+:::{.callout-wyniki}
+Mediany i rozstępy międzykwartylowe liczby godzin nauki są niemal identyczne na wszystkich pięciu poziomach stresu: pudełka leżą na tej samej wysokości, a średnie (białe romby) praktycznie się pokrywają. Potwierdza to współczynnik korelacji Pearsona, który wynosi **r ≈ 0,01** (cor.test, p = 0,66), czyli praktycznie zero. Wniosek: w tych danych liczba godzin nauki **nie wiąże się** z deklarowanym poziomem stresu.
+:::
+
+## 5. Czy kierunek studiów wiąże się z jakością snu i poziomem stresu? {.tabset .tabset-fade .tabset-pills}
+
+:::{.callout-note}
+**Uwaga metodologiczna.** Kolumna `Course` zawiera 48 nieujednoliconych wartości, z których wiele ma bardzo małą liczebność. Aby odsetki w obrębie kierunku były wiarygodne, najpierw uporządkowałam nazwy kierunków, a następnie ograniczyłam wykresy do kierunków o liczebności **n ≥ 20** (akronimy jak BCS, BIT, KOE zostają wielkimi literami). Skala jakości snu: 1 = bardzo zła, 5 = bardzo dobra; skala stresu: 1 = niski, 5 = wysoki.
+:::
+
+```{r q5-data}
+dane_kierunki <- courses_min_n(mentalhealth_data, 20)
+```
+
+### Jakość snu
+
+```{r q5-sen, fig.cap="Rysunek 5: Procentowy rozkład jakości snu według kierunku studiów (kierunki o liczebności n ≥ 20)."}
+ggplot(dane_kierunki,
+       aes(x = fct_rev(fct_infreq(Course_clean)), fill = Sen_f)) +
+  geom_bar(position = "fill", width = 0.85) +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_brewer(palette = "RdYlGn") +
+  labs(title = "Rozkład jakości snu według kierunku studiów (n ≥ 20)",
+       x = "Kierunek studiów", y = "Procent studentów", fill = "Jakość snu")
+```
+
+:::{.callout-wyniki}
+Po uporządkowaniu nazw kierunków i ograniczeniu do kierunków o wystarczającej liczebności widać pewne zróżnicowanie udziału poszczególnych ocen jakości snu. Różnice te należy jednak interpretować **ostrożnie**: zmienna `SleepQuality` ma w całym zbiorze rozkład zbliżony do jednostajnego, więc obserwowane wahania mogą wynikać z losowości próby. Na tej podstawie nie można jednoznacznie stwierdzić, że kierunek studiów determinuje jakość snu.
+:::
+
+### Poziom stresu
+
+```{r q5-stres, fig.cap="Rysunek 6: Procentowy rozkład poziomu stresu według kierunku studiów (kierunki o liczebności n ≥ 20)."}
+ggplot(dane_kierunki,
+       aes(x = fct_rev(fct_infreq(Course_clean)), fill = Stres_f)) +
+  geom_bar(position = "fill", width = 0.85) +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_brewer(palette = "RdYlGn", direction = -1) +
+  labs(title = "Rozkład poziomu stresu według kierunku studiów (n ≥ 20)",
+       x = "Kierunek studiów", y = "Procent studentów", fill = "Poziom stresu")
+```
+
+:::{.callout-wyniki}
+Również w przypadku poziomu stresu między kierunkami widać wahania udziału poszczególnych ocen. Podobnie jak przy jakości snu, zmienna `StudyStressLevel` ma rozkład bliski jednostajnemu, a liczebności kierunków są ograniczone, dlatego różnic tych **nie traktuję jako stabilnej prawidłowości**. Mocniejsze wnioski wymagałyby większej liczby obserwacji w obrębie poszczególnych kierunków.
+:::
+
+## 6. Jak liczba godzin nauki wpływa na średnią ocen (CGPA)?
+
+CGPA (Cumulative Grade Point Average) to skumulowana średnia ocen. Na uczelniach służy do mierzenia ogólnych osiągnięć akademickich studenta na podstawie ocen A, B, C, D lub F.
+
+```{r q6, fig.cap="Rysunek 7: Zależność między liczbą godzin nauki a średnią ocen (CGPA) z linią regresji liniowej."}
+model_cgpa <- lm(CGPA ~ StudyHoursPerWeek, data = mentalhealth_data)
+r_cgpa     <- cor(mentalhealth_data$StudyHoursPerWeek, mentalhealth_data$CGPA)
+r2_cgpa    <- summary(model_cgpa)$r.squared
+
+ggplot(mentalhealth_data, aes(x = StudyHoursPerWeek, y = CGPA)) +
+  geom_point(color = "#0072B2", alpha = 0.45) +
+  geom_smooth(method = "lm", se = TRUE, color = "#D55E00") +
+  annotate("label", x = 3, y = 3.9, hjust = 0, fill = "white", label.size = 0,
+           label = sprintf("r = %.2f\nR² = %.2f", r_cgpa, r2_cgpa), fontface = "bold") +
+  labs(title = "Zależność między godzinami nauki a średnią ocen (CGPA)",
+       subtitle = "Najsilniejsza zależność w całym zbiorze",
+       x = "Liczba godzin nauki w tygodniu", y = "Średnia ocen (CGPA)")
+```
+
+```{r q6-table}
+ct6 <- cor.test(mentalhealth_data$StudyHoursPerWeek, mentalhealth_data$CGPA)
+kable(tibble::tibble(
+  Miara   = c("Pearson r", "p (cor.test)", "Nachylenie (slope)", "R²"),
+  Wartość = c(round(unname(ct6$estimate), 3),
+              format.pval(ct6$p.value, eps = 2.2e-16),
+              round(unname(coef(model_cgpa)[2]), 3),
+              round(r2_cgpa, 3))
+), caption = "Q6: StudyHoursPerWeek vs CGPA, statystyki") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+:::{.callout-wyniki}
+Zależność jest dodatnia i **bardzo silna**: współczynnik korelacji Pearsona wynosi **r = 0,93** (p < 2,2e-16), a model liniowy `CGPA ~ StudyHoursPerWeek` daje **R² ≈ 0,87**: liczba godzin nauki wyjaśnia ok. 87% zmienności CGPA. Każda dodatkowa godzina nauki tygodniowo wiąże się ze wzrostem CGPA o ok. 0,13 punktu. Należy jednak pamiętać, że korelacja oznacza współwystępowanie, a nie związek przyczynowy, a tak wysoka wartość r jest nietypowa dla rzeczywistych danych akademickich i może wynikać ze sposobu wygenerowania tego zbioru.
+:::
+
+## 7. Czy studenci ze wsparciem psychologicznym rzadziej doświadczają ataków paniki?
+
+```{r q7, fig.cap="Rysunek 8: Odsetek studentów z atakami paniki w zależności od dostępu do wsparcia psychologicznego."}
+wsparcie_panika <- mentalhealth_data %>%
+  group_by(Wsparcie_f) %>%
+  summarise(n = n(), Odsetek = mean(PanicAttack), .groups = "drop")
+
+ggplot(wsparcie_panika, aes(x = Wsparcie_f, y = Odsetek, fill = Wsparcie_f)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = sprintf("%s\n(n = %d)", percent(Odsetek, accuracy = 0.1), n)),
+            vjust = -0.3, size = 4) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, 0.6), expand = expansion(mult = c(0, 0.1))) +
+  scale_fill_manual(values = c("Bez wsparcia" = "#D55E00", "Ze wsparciem" = "#009E73")) +
+  labs(title = "Odsetek ataków paniki w zależności od dostępu do wsparcia",
+       x = NULL, y = "Odsetek studentów z atakami paniki") +
+  guides(fill = "none")
+```
+
+```{r q7-test}
+p_wsparcie <- suppressWarnings(
+  chisq.test(table(mentalhealth_data$HasMentalHealthSupport,
+                   mentalhealth_data$PanicAttack))$p.value)
+cat(sprintf("Test chi-kwadrat (wsparcie × ataki paniki): p = %.2f\n", p_wsparcie))
+```
+
+:::{.callout-wyniki}
+Odsetek ataków paniki w obrębie każdej grupy wynosi **46,3%** wśród studentów bez wsparcia (n = 933) oraz **38,8%** wśród studentów ze wsparciem (n = 67). Kierunek różnicy jest zgodny z intuicją, jednak różnica **nie jest istotna statystycznie** (test chi-kwadrat, p = 0,29), a grupa korzystająca ze wsparcia liczy zaledwie 67 osób, więc jej odsetek obarczony jest dużą niepewnością. Dane **nie dają podstaw**, by twierdzić, że wsparcie psychologiczne realnie zmniejsza częstość ataków paniki.
+:::
+
+## 8. Czy dostęp do wsparcia psychologicznego różni się w zależności od kierunku studiów?
+
+Tak jak w pytaniu 5, analizę opieram na uporządkowanej zmiennej `Course_clean` i ograniczam ją do kierunków o liczebności n ≥ 20 (przy nielicznych kierunkach odsetki bywają skrajne (0% lub 100%) wyłącznie z powodu małej próby). Dodatkowo wsparcie deklaruje w całym zbiorze tylko 6,7% studentów.
+
+```{r q8, fig.cap="Rysunek 9: Procentowy dostęp do wsparcia psychologicznego według kierunku studiów (kierunki o liczebności n ≥ 20)."}
+ggplot(dane_kierunki,
+       aes(x = fct_rev(fct_infreq(Course_clean)), fill = Wsparcie_f)) +
+  geom_bar(position = "fill", width = 0.85) +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("Bez wsparcia" = "#D55E00", "Ze wsparciem" = "#009E73")) +
+  labs(title = "Dostęp do wsparcia psychologicznego według kierunku (n ≥ 20)",
+       x = "Kierunek studiów", y = "Procent studentów", fill = "Wsparcie psychologiczne")
+```
+
+:::{.callout-wyniki}
+Na większości kierunków odsetek studentów bez wsparcia psychologicznego jest znacznie wyższy niż tych, którzy z niego korzystają: na wielu kierunkach niemal 100% studentów deklaruje brak wsparcia. Nieco wyższy udział osób ze wsparciem widać na nielicznych kierunkach (m.in. Psychology, Biomedical Science), ale ponieważ w całym zbiorze wsparcie deklaruje tylko 6,7% studentów, różnice te opierają się na **pojedynczych osobach** i należy interpretować je z dużą ostrożnością.
+:::
+
+## 9. Korelacje między zmiennymi ilościowymi
+
+Aby zbadać zależności między zmiennymi ilościowymi, obliczam macierz korelacji Pearsona dla CGPA, poziomu stresu, liczby godzin nauki, jakości snu oraz zaangażowania akademickiego. Wartości liczbowe wyświetlam wprost, a na wykresie pomijam korelacje nieistotne statystycznie.
+
+```{r q9-matrix}
+zmienne_kor <- mentalhealth_data %>%
+  select(CGPA, StudyStressLevel, StudyHoursPerWeek, SleepQuality, AcademicEngagement)
+macierz_kor <- cor(zmienne_kor)
+
+kable(round(macierz_kor, 3), caption = "Macierz korelacji Pearsona") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+```{r q9-corrplot, fig.width=7, fig.height=6, fig.cap="Rysunek 10: Macierz korelacji Pearsona zmiennych ilościowych (puste pola = korelacje nieistotne statystycznie)."}
+p_kor <- cor.mtest(zmienne_kor)$p
+corrplot(macierz_kor,
+         method = "color", type = "upper", order = "original",
+         addCoef.col = "black", number.cex = 0.85,
+         p.mat = p_kor, sig.level = 0.05, insig = "blank",
+         col = brewer.pal(n = 8, name = "RdYlBu"),
+         tl.col = "black", tl.srt = 45,
+         mar = c(0, 0, 1, 0),
+         title = "Korelacje (puste pola = nieistotne, p ≥ 0,05)")
+```
+
+:::{.callout-wyniki}
+- **Bardzo silna korelacja CGPA ↔ StudyHoursPerWeek (r = 0,93):** zdecydowanie najsilniejsza zależność w zbiorze. To ta para, a **nie** poziom stresu, dominuje na wykresie korelacji.
+- **Brak związku StudyStressLevel ↔ StudyHoursPerWeek (r = 0,01):** wbrew pierwszemu wrażeniu poziom stresu jest praktycznie nieskorelowany z liczbą godzin nauki.
+- **Słaba korelacja SleepQuality z resztą (|r| ≤ 0,05):** jakość snu jest niemal nieskorelowana ze wszystkimi pozostałymi zmiennymi; AcademicEngagement ↔ CGPA jest tylko słaba (r = 0,15).
+
+*Uwaga metodologiczna:* przy n = 1000 nawet bardzo małe współczynniki bywają „istotne" statystycznie, dlatego o interpretacji decyduje **siła efektu** (wartość r), a nie samo p.
+:::
+
+## 10. Czy problemy zdrowia psychicznego zmieniają się wraz z rokiem studiów?
+
+Wykorzystuję tutaj uporządkowaną zmienną `YearOfStudy`. Porównuję odsetki trzech objawów w obrębie każdego roku studiów. Liczebności roczników są różne (Year 1 = 412, Year 2 = 274, Year 3 = 240, Year 4 = 74), więc ostatni rok opiera się na małej grupie.
+
+```{r q10, fig.cap="Rysunek 11: Odsetek występowania objawów w zależności od roku studiów."}
+rok_objawy <- mentalhealth_data %>%
+  group_by(YearOfStudy) %>%
+  summarise(Depresja       = mean(Depression),
+            Lęk            = mean(Anxiety),
+            `Ataki paniki` = mean(PanicAttack),
+            .groups = "drop") %>%
+  pivot_longer(-YearOfStudy, names_to = "Problem", values_to = "Odsetek")
+
+ggplot(rok_objawy, aes(x = YearOfStudy, y = Odsetek,
+                       color = Problem, group = Problem)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.8) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, 0.6), expand = expansion(mult = c(0, 0.05))) +
+  scale_color_manual(values = pal_okabe) +
+  labs(title = "Odsetek objawów w zależności od roku studiów",
+       subtitle = "Linie niemal poziome → brak wyraźnego trendu z rokiem studiów",
+       x = "Rok studiów", y = "Odsetek studentów", color = "Problem")
+```
+
+:::{.callout-wyniki}
+Odsetki wszystkich trzech objawów utrzymują się na zbliżonym poziomie (ok. 45–53%) na każdym roku studiów: linie są niemal poziome. Widać jedynie niewielki wzrost odsetka depresji na 3. i 4. roku (z ok. 47% do 51–53%), jednak 4. rok obejmuje tylko 74 osoby, więc różnicy tej nie należy nadinterpretować. Również średni poziom stresu jest praktycznie stały (ok. 3,0 na wszystkich latach). Wniosek: rok studiów **nie różnicuje w wyraźny sposób** występowania problemów zdrowia psychicznego.
+:::
+
+# Zakończenie
+
+Poniższa tabela zbiera najważniejsze wyniki wszystkich dziesięciu pytań badawczych.
+
+```{r podsumowanie}
+podsumowanie <- tibble::tribble(
+  ~`#`, ~Zagadnienie,              ~`Najważniejszy wynik`,
+  "1",  "Najczęstszy objaw",       "Depresja 48,3%, lęk 47,4%, ataki paniki 45,8% (bardzo wyrównane)",
+  "2",  "Płeć a objawy",           "Brak istotnych różnic K vs M (p = 0,21 / 0,91 / 0,72)",
+  "3",  "Wiek a objawy",           "Młodsi nieco bardziej podatni na lęk i panikę (obserwacja wstępna)",
+  "4",  "Godziny nauki a stres",   "Brak związku (r = 0,01), rozkłady godzin równe na każdym poziomie",
+  "5",  "Kierunek a sen i stres",  "Zróżnicowanie niestabilne, brak jednoznacznych wniosków",
+  "6",  "Godziny nauki a CGPA",    "Bardzo silny dodatni związek (r = 0,93; R² ≈ 0,87)",
+  "7",  "Wsparcie a ataki paniki", "38,8% vs 46,3%, ale p = 0,29 i tylko n = 67 osób ze wsparciem",
+  "8",  "Wsparcie a kierunek",     "Dominuje brak wsparcia (6,7% ogółem); różnice niepewne",
+  "9",  "Korelacje ogółem",        "Jedyna silna para: godziny nauki ↔ CGPA (r = 0,93)",
+  "10", "Rok studiów a objawy",    "Odsetki ~równe na wszystkich latach (lekki wzrost depresji w l. 3–4)"
+)
+
+kable(podsumowanie, align = c("c", "l", "l"),
+      caption = "Podsumowanie wyników pytań badawczych") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE, position = "center") %>%
+  column_spec(1, bold = TRUE, width = "2.5em") %>%
+  column_spec(2, bold = TRUE, width = "12em")
+```
+
+:::{.callout-key}
+**Najważniejszy wniosek.** Jedyną silną i dobrze udokumentowaną zależnością w całym zbiorze jest **dodatni związek między liczbą godzin nauki a średnią ocen (CGPA): r = 0,93, R² ≈ 0,87**. Pozostałe rozważane czynniki (płeć, wiek, kierunek studiów oraz dostęp do wsparcia psychologicznego) nie wykazały istotnych statystycznie zależności z występowaniem problemów zdrowia psychicznego.
+:::
+
+:::{.callout-note}
+**Ograniczenia analizy.** Wyniki należy interpretować z ostrożnością ze względu na ograniczenia zbioru:
+
+- **niezrównoważona próba** pod względem płci (760 kobiet vs 240 mężczyzn),
+- **bardzo mały odsetek** osób korzystających ze wsparcia psychologicznego (6,7%), co osłabia wnioski w pytaniach 7 i 8,
+- **silnie zaszumiona zmienna `Course`** (48 nieujednoliconych kategorii, wiele o małej liczebności),
+- **wąski zakres wieku** (18–25 lat), utrudniający analizę wpływu wieku.
+
+Dodatkowo nietypowo wysoka korelacja godzin nauki z CGPA (r = 0,93) sugeruje, że zbiór może mieć charakter syntetyczny, co również nakazuje ostrożność przy uogólnianiu wniosków na rzeczywistą populację studentów.
+:::
